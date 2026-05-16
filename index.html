@@ -508,7 +508,7 @@ function fetchDexPrices(){
     // PAPER : recalcul immédiat du P&L après chaque update prix
     if(MODE==='paper'||MODE==='live'){
       updateKPIs();
-      if(curTab==='live') renderLive();
+      render(); // respecte l'onglet actif
     }
     var tag=document.getElementById('modeTag');
     if(MODE==='live'&&tag){tag.textContent='LIVE';tag.style.borderColor='#166534';tag.style.color='#4ade80';}
@@ -721,11 +721,13 @@ function botTick(){
   var kept=[];
   for(var i=0;i<positions.length;i++){
     var pos=positions[i];if(pos.isPerp){kept.push(pos);continue;}
-    var tok=getTok(pos.s);if(!tok){kept.push(pos);continue;}
-    var ex=checkExit(pos,tok.price);
+    var tok=getTok(pos.s);
+    var cur=tok?tok.price:pos.ep;
+    // Toujours vérifier le TIMEOUT même si prix non disponible
+    var ex=checkExit(pos,cur);
     if(ex.exit){
       var pu=pos.sz*ex.pct;capD+=pos.sz+pu;
-      closed.push(Object.assign({},pos,{xp:tok.price,xts:Date.now(),pct:ex.pct,pu:pu,why:ex.why,dur:Date.now()-pos.ts}));
+      closed.push(Object.assign({},pos,{xp:cur,xts:Date.now(),pct:ex.pct,pu:pu,why:ex.why,dur:Date.now()-pos.ts}));
       var em={TP3:'🎯',DUMP:'💥',TIMEOUT:'⏱',TRAIL_SL:'📉'}[ex.why]||'·';
       flash(em+' '+ex.why+' '+pos.s+' '+fPct(ex.pct)+' '+fUsd(pu),pu>=0?'#4ade80':'#f87171');
       if(ex.why==='DUMP'&&pos.mint&&TOGGLES.useBlacklist.on)blacklistMap[pos.mint]=true;
@@ -1050,6 +1052,9 @@ function setTab(t){
     b.style.borderTopColor=tabs[i]===t?'#f59e0b':'transparent';
     b.style.color=tabs[i]===t?'#f59e0b':'#334155';
   }
+  // Forcer scroll en haut
+  var c=document.getElementById('content');
+  if(c) c.scrollTop=0;
   render();
 }
 function render(){
@@ -1058,6 +1063,7 @@ function render(){
   else if(curTab==='back')renderBacktest();
   else if(curTab==='perps')renderPerps();
   else if(curTab==='hist')renderHist();
+  else renderLive(); // fallback
 }
 
 // ═══════════════════════════════════════════════
