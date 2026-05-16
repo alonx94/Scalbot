@@ -128,7 +128,8 @@ input{font-family:'DM Mono','Courier New',monospace;outline:none}
 
   <div style="display:flex;gap:6px">
     <button onclick="saveSettings()" style="flex:1;padding:10px;background:rgba(245,158,11,.1);border:1px solid #78350f;color:#f59e0b;border-radius:7px;font-family:'Bebas Neue';font-size:14px;letter-spacing:2px">SAUVEGARDER</button>
-    <button onclick="resetSettings()" style="padding:10px 11px;background:none;border:1px solid #1e293b;color:#334155;border-radius:7px;font-size:9px">Reset</button>
+    <button onclick="resetSettings()" style="padding:10px 11px;background:none;border:1px solid #1e293b;color:#334155;border-radius:7px;font-size:9px">Reset cfg</button>
+    <button onclick="resetState()" style="padding:10px 11px;background:rgba(239,68,68,.08);border:1px solid #7f1d1d;color:#f87171;border-radius:7px;font-size:9px">🗑 Session</button>
   </div>
 </div>
 
@@ -1506,11 +1507,88 @@ function flash(msg,color){
 }
 
 // ═══════════════════════════════════════════════
+// SAUVEGARDE LOCALE (survit au refresh)
+// ═══════════════════════════════════════════════
+var SAVE_KEY = 'scalpbot_state_v1';
+var saveTimer = null;
+
+function saveState(){
+  try {
+    var state = {
+      capital: capital,
+      positions: positions,
+      history: history,
+      stats: stats,
+      snaps: snaps.slice(-100), // garder les 100 derniers points
+      MODE: MODE,
+      currentProfile: currentProfile,
+      CFG: CFG,
+      TOGGLES: TOGGLES,
+      INIT_CAP: INIT_CAP,
+      ts: Date.now()
+    };
+    localStorage.setItem(SAVE_KEY, JSON.stringify(state));
+  } catch(e) {}
+}
+
+function loadState(){
+  try {
+    var raw = localStorage.getItem(SAVE_KEY);
+    if(!raw) return false;
+    var state = JSON.parse(raw);
+    // Ne restaurer que si moins de 24h
+    if(Date.now() - state.ts > 86400000) {
+      localStorage.removeItem(SAVE_KEY);
+      return false;
+    }
+    capital   = state.capital   || CFG.capital;
+    positions = state.positions || [];
+    history   = state.history   || [];
+    stats     = state.stats     || {w:0,l:0,to:0,du:0,pnl:0};
+    snaps     = state.snaps     || [{v:capital,t:Date.now()}];
+    INIT_CAP  = state.INIT_CAP  || CFG.capital;
+    if(state.MODE)           MODE = state.MODE;
+    if(state.currentProfile) currentProfile = state.currentProfile;
+    if(state.CFG)            Object.assign(CFG, state.CFG);
+    if(state.TOGGLES){
+      for(var k in state.TOGGLES){
+        if(TOGGLES[k]) TOGGLES[k].on = state.TOGGLES[k].on;
+      }
+    }
+    flash('✓ Session restaurée — '+history.length+' trades · $'+capital.toFixed(2),'#4ade80');
+    return true;
+  } catch(e) { return false; }
+}
+
+function resetState(){
+  localStorage.removeItem(SAVE_KEY);
+  capital = CFG.capital; INIT_CAP = CFG.capital;
+  positions = []; history = []; stats = {w:0,l:0,to:0,du:0,pnl:0};
+  snaps = [{v:CFG.capital,t:Date.now()}];
+  updateKPIs(); render();
+  flash('🔄 Session réinitialisée','#f59e0b');
+}
+
+// Auto-save toutes les 5 secondes
+function startAutoSave(){
+  saveTimer = setInterval(saveState, 5000);
+}
+
+// ═══════════════════════════════════════════════
 // INIT
 // ═══════════════════════════════════════════════
 setProfile('balanced');
+
+// Charger l'état sauvegardé
+var restored = loadState();
+if(restored) {
+  setMode(MODE);
+  setProfile(currentProfile);
+}
+
 updateKPIs();
 renderLive();
+startAutoSave();
 
 (function(){
   var ph=getPh();
